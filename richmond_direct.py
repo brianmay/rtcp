@@ -1,67 +1,11 @@
 #!/usr/bin/python2
-
 import argparse
 import configparser
-from hashlib import sha1
-import hmac
 import datetime
-import requests
 import pytz
 from tzlocal import get_localzone
-from urllib import urlencode, quote
 
-
-class Ptv(object):
-    def __init__(self, dev_id, key):
-        self.dev_id = dev_id
-        self.key = key
-
-    def getUrl(self, request):
-        dev_id = self.dev_id
-        key = str(self.key)
-        request = request + ('&' if ('?' in request) else '?')
-        raw = request+'devid={0}'.format(dev_id)
-        hashed = hmac.new(key, raw, sha1)
-        signature = hashed.hexdigest()
-        return ('https://timetableapi.ptv.vic.gov.au'
-                + raw + '&signature={1}'.format(dev_id, signature))
-
-    def get_pattern(self, run_id, route_type, **kwargs):
-        url_path = quote(
-            '/v3/pattern/run/'+str(run_id)+'/route_type/'+str(route_type))
-
-        args = dict(kwargs)
-        args['date_utc'] = kwargs['date_utc'].isoformat() + "Z"
-
-        query_string = urlencode(args)
-
-        url = self.getUrl(url_path + '?' + query_string)
-
-        r = requests.get(url)
-        j = r.json()
-        return j
-
-    def get_departures(self, route_type, stop_id, route_id=None, **kwargs):
-        url_components = [
-            '/v3/departures',
-            '/route_type/'+str(route_type),
-            '/stop/'+str(stop_id)
-        ]
-        if route_id is not None:
-            url_components.append("/route/"+str(route_id))
-
-        url_path = quote("".join(url_components))
-
-        args = dict(kwargs)
-        args['date_utc'] = kwargs['date_utc'].isoformat() + "Z"
-
-        query_string = urlencode(args)
-
-        url = self.getUrl(url_path + '?' + query_string)
-
-        r = requests.get(url)
-        j = r.json()
-        return j
+import ptv
 
 
 def time_hhmm(string):
@@ -105,7 +49,7 @@ def main():
     dev_id = ptv_section.getint('dev_id')
     key = ptv_section['key']
 
-    ptv = Ptv(dev_id, key)
+    connection = ptv.Connection(dev_id, key)
 
     today = datetime.date.today()
 
@@ -131,7 +75,7 @@ def main():
     departed_dt_utc = departed_dt_local.astimezone(pytz.utc)
 
     # Get the run_id
-    j = ptv.get_departures(
+    j = connection.get_departures(
             route_type=departed_route_type, stop_id=departed_stop_id,
             direction_id=0, max_results=1, date_utc=departed_dt_utc)
     run_id = j['departures'][0]['run_id']
@@ -155,7 +99,7 @@ def main():
           % (departure_dt_local, departure_is_realtime))
 
     # Get the stopping patterns
-    j = ptv.get_pattern(
+    j = connection.get_pattern(
         run_id=run_id,
         route_type=departed_route_type,
         date_utc=departed_dt_utc,
@@ -190,7 +134,7 @@ def main():
           % (change_dt_local, change_is_realtime))
 
     # Look up departures after change time
-    j = ptv.get_departures(
+    j = connection.get_departures(
             route_type=0, stop_id=change_stop_id,
             direction_id=0, expand="run",
             max_results=10, date_utc=change_dt_utc)
@@ -217,7 +161,7 @@ def main():
             continue
 
         # get pattern for this run
-        pattern = ptv.get_pattern(
+        pattern = connection.get_pattern(
             departure['run_id'], route_type=0, date_utc=departure_dt_utc)
 
         # get the destination for this run

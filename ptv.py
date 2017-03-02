@@ -32,6 +32,7 @@ class Connection(object):
         url = self.getUrl(url_path + '?' + query_string)
 
         r = requests.get(url)
+        r.raise_for_status()
         j = r.json()
         return j
 
@@ -54,6 +55,7 @@ class Connection(object):
         url = self.getUrl(url_path + '?' + query_string)
 
         r = requests.get(url)
+        r.raise_for_status()
         j = r.json()
         return j
 

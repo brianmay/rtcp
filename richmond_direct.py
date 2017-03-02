@@ -1,3 +1,6 @@
+#!/usr/bin/python2
+
+import argparse
 import configparser
 from hashlib import sha1
 import hmac
@@ -61,7 +64,39 @@ class Ptv(object):
         return j
 
 
+def time_hhmm(string):
+    split = string.split(":")
+    if len(split) != 2:
+        raise argparse.ArgumentTypeError("time '%r' is not valid" % string)
+
+    try:
+        hh = int(split[0])
+        mm = int(split[1])
+    except ValueError:
+        raise argparse.ArgumentTypeError("time '%r' is not valid" % string)
+
+    try:
+        time = datetime.time(hour=hh, minute=mm)
+    except ValueError:
+        raise argparse.ArgumentTypeError("time '%r' is not valid" % string)
+
+    return time
+
+
 def main():
+    parser = argparse.ArgumentParser(
+        description='Guesstimates connections at Richmond'
+        ' station for direct service.')
+    parser.add_argument(
+        'departure_time',
+        type=time_hhmm,
+        help='Departure time for first train.')
+    parser.add_argument(
+        'departure_station',
+        type=int,
+        help='Departure station for first train.')
+    args = parser.parse_args()
+
     # configuration
     config = configparser.ConfigParser()
     config.read('config.ini')
@@ -78,10 +113,10 @@ def main():
     to_zone = get_localzone()
 
     # service we are currently on
-    departed_time = datetime.time(hour=7, minute=47)
+    departed_time = args.departure_time
     departed_dt = datetime.datetime.combine(today, departed_time)
     print(departed_dt)
-    departed_stop_id = 1199
+    departed_stop_id = args.departure_station
     departed_route_type = 0
 
     # where we expect to change

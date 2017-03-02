@@ -1,0 +1,31 @@
+#!/usr/bin/python2
+import argparse
+import configparser
+import json
+
+import ptv
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Search for location.')
+    parser.add_argument(
+        'search_term',
+        help='Seach term to locate.')
+    args = parser.parse_args()
+
+    # configuration
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+
+    ptv_section = config['ptv']
+    dev_id = ptv_section.getint('dev_id')
+    key = ptv_section['key']
+
+    connection = ptv.Connection(dev_id, key)
+    results = connection.search(args.search_term)
+    print(json.dumps(results, indent=4))
+
+
+if __name__ == "__main__":
+    main()

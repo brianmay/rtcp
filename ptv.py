@@ -59,5 +59,20 @@ class Connection(object):
         j = r.json()
         return j
 
+    def search(self, search_term, **kwargs):
+        url_components = [
+            '/v3/search/',
+            str(search_term),
+        ]
 
+        url_path = quote("".join(url_components))
 
+        args = dict(kwargs)
+        query_string = urlencode(args)
+
+        url = self.getUrl(url_path + '?' + query_string)
+
+        r = requests.get(url)
+        r.raise_for_status()
+        j = r.json()
+        return j

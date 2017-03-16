@@ -27,6 +27,27 @@ def time_hhmm(string):
     return time
 
 
+def print_result(result, change_dt_utc):
+    print(
+        "stop:%d %d %s (%s) (RT:%s) %s (%s) (RT:%s) "
+        "platform %s (platform:%s direct:%s)" % (
+            result['change_stop_id'],
+            result['run']['run_id'],
+            result['departure_dt_local'].time(),
+            result['departure_dt_utc'].replace(tzinfo=None)
+            - change_dt_utc.replace(tzinfo=None),
+            result['departure_is_realtime'],
+            result['arrival_dt_local'].time(),
+            result['arrival_dt_utc'].replace(tzinfo=None)
+            - change_dt_utc.replace(tzinfo=None),
+            result['arrival_is_realtime'],
+            result['departure']['platform_number'],
+            result['departure']['at_platform'],
+            result['direct'],
+        )
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Guesstimates connections at Richmond'
@@ -64,7 +85,26 @@ def main():
     departed_route_type = 0
 
     # where we expect to change
-    change_stop_id = 1162
+    changes = [
+        {
+            'stop_id': 1162,
+            'direct_sequence': [1162, 1071],
+            'direct_time': datetime.timedelta(minutes=4),
+            'loop_time': datetime.timedelta(minutes=14),
+            'params': {
+                'direction_id': 1
+            },
+        },
+        {
+            'stop_id': 1155,
+            'direct_sequence': [1155, 1071],
+            'direct_time': datetime.timedelta(minutes=4),
+            'loop_time': datetime.timedelta(minutes=10),
+            'params': {
+                'platform_numbers': 3
+            },
+        }
+    ]
 
     # where we expect to finish
     destination_stop_id = 1071
@@ -77,10 +117,11 @@ def main():
     # Get the run_id
     j = connection.get_departures(
             route_type=departed_route_type, stop_id=departed_stop_id,
-            direction_id=0, max_results=1, date_utc=departed_dt_utc)
+            direction_id=1, max_results=1, date_utc=departed_dt_utc)
     run_id = j['departures'][0]['run_id']
     print("run_id = %s" % run_id)
 
+    # Get the initial stop departure details
     departure = j['departures'][0]
     if departure['estimated_departure_utc'] is not None:
         departure_dt_string = departure['estimated_departure_utc']
@@ -99,146 +140,155 @@ def main():
           % (departure_dt_local, departure_is_realtime))
 
     # Get the stopping patterns
-    j = connection.get_pattern(
+    first_pattern = connection.get_pattern(
         run_id=run_id,
         route_type=departed_route_type,
         date_utc=departed_dt_utc,
     )
 
-    # Get the change stop departure details
-    departures = filter(
-        lambda d: d['stop_id'] == departed_stop_id, j['departures'])
-    assert len(departures) == 1
-
-    # Get the change stop departure details
-    departures = filter(
-        lambda d: d['stop_id'] == change_stop_id, j['departures'])
-    assert len(departures) == 1
-
-    # Get the expected arrival time at change_stop
-    departure = departures[0]
-    if departure['estimated_departure_utc'] is not None:
-        change_dt_string = departure['estimated_departure_utc']
-        change_is_realtime = True
-    else:
-        change_dt_string = departure['scheduled_departure_utc']
-        change_is_realtime = False
-
-    change_dt_utc = datetime.datetime.strptime(
-        change_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
-    change_dt_local = change_dt_utc.astimezone(to_zone)
-
-    print("change time (UTC) = %s (%s)"
-          % (change_dt_utc, change_is_realtime))
-    print("change time (local) = %s (%s)"
-          % (change_dt_local, change_is_realtime))
-
-    # Look up departures after change time
-    j = connection.get_departures(
-            route_type=0, stop_id=change_stop_id,
-            direction_id=0, expand="run",
-            max_results=10, date_utc=change_dt_utc)
-
+    changes_results = {}
+    runs = set()
     results = []
+    for change in changes:
+        change_stop_id = change['stop_id']
 
-    for departure in j['departures']:
-        run = j['runs'][str(departure['run_id'])]
-
-        # get the departure time from change stop
-        if departure['estimated_departure_utc'] is not None:
-            departure_dt_string = departure['estimated_departure_utc']
-            departure_is_realtime = True
-        else:
-            departure_dt_string = departure['scheduled_departure_utc']
-            departure_is_realtime = False
-
-        departure_dt_utc = datetime.datetime.strptime(
-            departure_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
-        departure_dt_local = departure_dt_utc.astimezone(to_zone)
-
-        # skip if too early
-        if departure_dt_utc < change_dt_utc:
-            continue
-
-        # get pattern for this run
-        pattern = connection.get_pattern(
-            departure['run_id'], route_type=0, date_utc=departure_dt_utc)
-
-        # get the destination for this run
-        if 'departures' not in pattern:
-            continue
-
-        destinations = filter(
-            lambda d: d['stop_id'] == destination_stop_id,
-            pattern['departures'],
+        # Get the change stop departure details
+        # import json
+        # print("looking for ", change_stop_id)
+        # print(json.dumps(first_pattern['departures'], indent=4))
+        departures = filter(
+            lambda d: d['stop_id'] == change_stop_id,
+            first_pattern['departures'],
         )
-        assert len(destinations) == 1
-        # destination = destinations[0]
+        assert len(departures) == 1
 
-        # is this a direct service?
-        parliament = filter(
-            lambda d: d['stop_id'] == 1155, pattern['departures'])
-        direct = len(parliament) == 0
-
-        # get the time we arrive at the destination
-        # if destination['estimated_departure_utc'] is not None:
-        #     arrival_dt_string = destination['estimated_departure_utc']
-        #     arrival_is_realtime = True
-        # else:
-        #     arrival_dt_string = destination['scheduled_departure_utc']
-        #     arrival_is_realtime = False
-        # arrival_dt_utc = datetime.datetime.strptime(
-        #     arrival_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
-        # arrival_dt_local = arrival_dt_utc.astimezone(to_zone)
-
-        if direct:
-            arrival_dt_utc = departure_dt_utc + datetime.timedelta(minutes=4)
+        # Get the expected arrival time at change_stop
+        departure = departures[0]
+        if departure['estimated_departure_utc'] is not None:
+            change_dt_string = departure['estimated_departure_utc']
+            change_is_realtime = True
         else:
-            arrival_dt_utc = departure_dt_utc + datetime.timedelta(minutes=14)
-        arrival_dt_local = arrival_dt_utc.astimezone(to_zone)
-        arrival_is_realtime = departure_is_realtime
+            change_dt_string = departure['scheduled_departure_utc']
+            change_is_realtime = False
 
-        results.append({
-            'departure_dt_local': departure_dt_local,
-            'departure_dt_utc': departure_dt_utc,
-            'departure_is_realtime': departure_is_realtime,
-            'arrival_dt_local': arrival_dt_local,
-            'arrival_dt_utc': arrival_dt_utc,
-            'arrival_is_realtime': arrival_is_realtime,
-            'departure': departure,
-            'run': run,
-            'pattern': pattern,
-            'direct': direct,
-        })
+        change_dt_utc = datetime.datetime.strptime(
+            change_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
+        change_dt_local = change_dt_utc.astimezone(to_zone)
+
+        print("%d change time (UTC) = %s (%s)"
+              % (change_stop_id, change_dt_utc, change_is_realtime))
+        print("%d change time (local) = %s (%s)"
+              % (change_stop_id, change_dt_local, change_is_realtime))
+
+        changes_results[change_stop_id] = {
+            'change_dt_utc': change_dt_utc,
+            'change_dt_local': change_dt_local,
+            'change_is_realtime': change_is_realtime,
+        }
+
+        params = change['params']
+
+        # Look up departures after change time
+        j = connection.get_departures(
+                route_type=0, stop_id=change_stop_id,
+                expand="run",
+                max_results=10, date_utc=change_dt_utc,
+                **params)
+
+        for departure in j['departures']:
+            run = j['runs'][str(departure['run_id'])]
+            if departure['run_id'] in runs:
+                continue
+            runs.add(departure['run_id'])
+
+            # get the departure time from change stop
+            if departure['estimated_departure_utc'] is not None:
+                departure_dt_string = departure['estimated_departure_utc']
+                departure_is_realtime = True
+            else:
+                departure_dt_string = departure['scheduled_departure_utc']
+                departure_is_realtime = False
+
+            departure_dt_utc = datetime.datetime.strptime(
+                departure_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(
+                tzinfo=pytz.utc)
+            departure_dt_local = departure_dt_utc.astimezone(to_zone)
+
+            # skip if too early
+            if departure_dt_utc < change_dt_utc:
+                continue
+
+            # get pattern for this run
+            pattern = connection.get_pattern(
+                departure['run_id'], route_type=0, date_utc=departure_dt_utc)
+
+            # get the destination for this run
+            if 'departures' not in pattern:
+                continue
+            stops = [d['stop_id'] for d in pattern['departures']]
+
+            destinations = filter(
+                lambda d: d['stop_id'] == destination_stop_id,
+                pattern['departures'],
+            )
+            assert len(destinations) == 1
+            # destination = destinations[0]
+
+            # is this a direct service?
+            direct_sequence = change['direct_sequence']
+            direct = any(
+                stops[a:a+len(direct_sequence)] == direct_sequence
+                for a in range(len(stops))
+            )
+
+            # get the time we arrive at the destination
+            # if destination['estimated_departure_utc'] is not None:
+            #     arrival_dt_string = destination['estimated_departure_utc']
+            #     arrival_is_realtime = True
+            # else:
+            #     arrival_dt_string = destination['scheduled_departure_utc']
+            #     arrival_is_realtime = False
+            # arrival_dt_utc = datetime.datetime.strptime(
+            #     arrival_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(
+            #     tzinfo=pytz.utc)
+            # arrival_dt_local = arrival_dt_utc.astimezone(to_zone)
+
+            if direct:
+                arrival_dt_utc = (
+                    departure_dt_utc
+                    + change['direct_time']
+                )
+            else:
+                arrival_dt_utc = (
+                    departure_dt_utc
+                    + change['loop_time']
+                )
+            arrival_dt_local = arrival_dt_utc.astimezone(to_zone)
+            arrival_is_realtime = departure_is_realtime
+
+            result = {
+                'departure_dt_local': departure_dt_local,
+                'departure_dt_utc': departure_dt_utc,
+                'departure_is_realtime': departure_is_realtime,
+                'arrival_dt_local': arrival_dt_local,
+                'arrival_dt_utc': arrival_dt_utc,
+                'arrival_is_realtime': arrival_is_realtime,
+                'departure': departure,
+                'run': run,
+                'pattern': pattern,
+                'direct': direct,
+                'change_stop_id': change_stop_id,
+            }
+            print_result(result, change_dt_utc)
+            results.append(result)
 
     print("")
 
     sorted_results = sorted(results, key=lambda r: r['arrival_dt_local'])
     for result in sorted_results:
-        print("%s (%s) %s (%s) platform %s (%s) direct %s" % (
-            result['departure_dt_local'],
-            result['departure_is_realtime'],
-            result['arrival_dt_local'],
-            result['arrival_is_realtime'],
-            result['departure']['platform_number'],
-            result['departure']['at_platform'],
-            result['direct']
-        ))
-
-    utcnow = datetime.datetime.utcnow()
-    utcnow = change_dt_utc
-    for result in sorted_results:
-        print("%s (%s) %s (%s) platform %s (%s) direct %s" % (
-            result['departure_dt_utc'].replace(tzinfo=None)
-            - utcnow.replace(tzinfo=None),
-            result['departure_is_realtime'],
-            result['arrival_dt_utc'].replace(tzinfo=None)
-            - utcnow.replace(tzinfo=None),
-            result['arrival_is_realtime'],
-            result['departure']['platform_number'],
-            result['departure']['at_platform'],
-            result['direct']
-        ))
+        change_stop_id = result['change_stop_id']
+        change_dt_utc = changes_results[change_stop_id]['change_dt_utc']
+        print_result(result, change_dt_utc)
 
 
 if __name__ == "__main__":

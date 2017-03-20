@@ -20,6 +20,17 @@ class Connection(object):
         return ('https://timetableapi.ptv.vic.gov.au'
                 + raw + '&signature={1}'.format(dev_id, signature))
 
+    def get_directions(self, route_id):
+        url_path = quote(
+            '/v3/directions/route/'+str(route_id))
+
+        url = self.getUrl(url_path)
+
+        r = requests.get(url)
+        r.raise_for_status()
+        j = r.json()
+        return j
+
     def get_pattern(self, run_id, route_type, **kwargs):
         url_path = quote(
             '/v3/pattern/run/'+str(run_id)+'/route_type/'+str(route_type))

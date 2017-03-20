@@ -84,6 +84,15 @@ def main():
     departed_stop_id = args.departure_station
     departed_route_type = 0
 
+    # Get the direction
+    directions = connection.get_directions(route_id=2)
+    city_directions = filter(
+        lambda d: d['direction_name'] == "City (Flinders Street)",
+        directions['directions'],
+    )
+    assert(len(city_directions) == 1)
+    direction_id = city_directions[0]['direction_id']
+
     # where we expect to change
     changes = [
         {
@@ -92,7 +101,7 @@ def main():
             'direct_time': datetime.timedelta(minutes=4),
             'loop_time': datetime.timedelta(minutes=14),
             'params': {
-                'direction_id': 1
+                'direction_id': direction_id,
             },
         },
         {
@@ -117,7 +126,7 @@ def main():
     # Get the run_id
     j = connection.get_departures(
             route_type=departed_route_type, stop_id=departed_stop_id,
-            direction_id=1, max_results=1, date_utc=departed_dt_utc)
+            direction_id=direction_id, max_results=1, date_utc=departed_dt_utc)
     run_id = j['departures'][0]['run_id']
     print("run_id = %s" % run_id)
 

@@ -143,9 +143,9 @@ def main():
         departure_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
     departure_dt_local = departure_dt_utc.astimezone(to_zone)
 
-    print("departure time (UTC) = %s (%s)"
+    print("departure time (UTC) = %s (RT:%s)"
           % (departure_dt_utc, departure_is_realtime))
-    print("departure time (local) = %s (%s)"
+    print("departure time (local) = %s (RT:%s)"
           % (departure_dt_local, departure_is_realtime))
 
     # Get the stopping patterns
@@ -184,9 +184,9 @@ def main():
             change_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
         change_dt_local = change_dt_utc.astimezone(to_zone)
 
-        print("%d change time (UTC) = %s (%s)"
+        print("%d change time (UTC) = %s (RT:%s)"
               % (change_stop_id, change_dt_utc, change_is_realtime))
-        print("%d change time (local) = %s (%s)"
+        print("%d change time (local) = %s (RT:%s)"
               % (change_stop_id, change_dt_local, change_is_realtime))
 
         changes_results[change_stop_id] = {

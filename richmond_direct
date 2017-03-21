@@ -27,7 +27,7 @@ def time_hhmm(string):
     return time
 
 
-def print_result(result, change_dt_utc):
+def print_result(result, departure_dt_utc, change_dt_utc):
     print(
         "stop:%d %d %s (%s) (RT:%s) %s (%s) (RT:%s) "
         "platform %s (platform:%s direct:%s)" % (
@@ -39,7 +39,7 @@ def print_result(result, change_dt_utc):
             result['departure_is_realtime'],
             result['arrival_dt_local'].time(),
             result['arrival_dt_utc'].replace(tzinfo=None)
-            - change_dt_utc.replace(tzinfo=None),
+            - departure_dt_utc.replace(tzinfo=None),
             result['arrival_is_realtime'],
             result['departure']['platform_number'],
             result['departure']['at_platform'],
@@ -139,14 +139,14 @@ def main():
         departure_dt_string = departure['scheduled_departure_utc']
         departure_is_realtime = False
 
-    departure_dt_utc = datetime.datetime.strptime(
+    departure_1_dt_utc = datetime.datetime.strptime(
         departure_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=pytz.utc)
-    departure_dt_local = departure_dt_utc.astimezone(to_zone)
+    departure_1_dt_local = departure_1_dt_utc.astimezone(to_zone)
 
     print("departure time (UTC) = %s (RT:%s)"
-          % (departure_dt_utc, departure_is_realtime))
+          % (departure_1_dt_utc, departure_is_realtime))
     print("departure time (local) = %s (RT:%s)"
-          % (departure_dt_local, departure_is_realtime))
+          % (departure_1_dt_local, departure_is_realtime))
 
     # Get the stopping patterns
     first_pattern = connection.get_pattern(
@@ -218,18 +218,18 @@ def main():
                 departure_dt_string = departure['scheduled_departure_utc']
                 departure_is_realtime = False
 
-            departure_dt_utc = datetime.datetime.strptime(
+            departure_2_dt_utc = datetime.datetime.strptime(
                 departure_dt_string, "%Y-%m-%dT%H:%M:%SZ").replace(
                 tzinfo=pytz.utc)
-            departure_dt_local = departure_dt_utc.astimezone(to_zone)
+            departure_dt_local = departure_2_dt_utc.astimezone(to_zone)
 
             # skip if too early
-            if departure_dt_utc < change_dt_utc:
+            if departure_2_dt_utc < change_dt_utc:
                 continue
 
             # get pattern for this run
             pattern = connection.get_pattern(
-                departure['run_id'], route_type=0, date_utc=departure_dt_utc)
+                departure['run_id'], route_type=0, date_utc=departure_2_dt_utc)
 
             # get the destination for this run
             if 'departures' not in pattern:
@@ -264,12 +264,12 @@ def main():
 
             if direct:
                 arrival_dt_utc = (
-                    departure_dt_utc
+                    departure_2_dt_utc
                     + change['direct_time']
                 )
             else:
                 arrival_dt_utc = (
-                    departure_dt_utc
+                    departure_2_dt_utc
                     + change['loop_time']
                 )
             arrival_dt_local = arrival_dt_utc.astimezone(to_zone)
@@ -277,7 +277,7 @@ def main():
 
             result = {
                 'departure_dt_local': departure_dt_local,
-                'departure_dt_utc': departure_dt_utc,
+                'departure_dt_utc': departure_2_dt_utc,
                 'departure_is_realtime': departure_is_realtime,
                 'arrival_dt_local': arrival_dt_local,
                 'arrival_dt_utc': arrival_dt_utc,
@@ -288,16 +288,18 @@ def main():
                 'direct': direct,
                 'change_stop_id': change_stop_id,
             }
-            print_result(result, change_dt_utc)
+            print_result(result, departure_1_dt_utc, change_dt_utc)
             results.append(result)
 
     print("")
+    print("SORTED RESULTS")
+    print("==============")
 
     sorted_results = sorted(results, key=lambda r: r['arrival_dt_local'])
     for result in sorted_results:
         change_stop_id = result['change_stop_id']
         change_dt_utc = changes_results[change_stop_id]['change_dt_utc']
-        print_result(result, change_dt_utc)
+        print_result(result, departure_1_dt_utc, change_dt_utc)
 
 
 if __name__ == "__main__":

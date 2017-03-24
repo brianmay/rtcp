@@ -169,6 +169,10 @@ def main():
             lambda d: d['stop_id'] == change_stop_id,
             first_pattern['departures'],
         )
+        if len(departures) < 1:
+            print("%d skipping as first service doesn't stop here"
+                  % change_stop_id)
+            continue
         assert len(departures) == 1
 
         # Get the expected arrival time at change_stop

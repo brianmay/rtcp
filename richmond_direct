@@ -80,7 +80,6 @@ def main():
     # service we are currently on
     departed_time = args.departure_time
     departed_dt = datetime.datetime.combine(today, departed_time)
-    print(departed_dt)
     departed_stop_id = args.departure_station
     departed_route_type = 0
 

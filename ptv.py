@@ -2,20 +2,20 @@
 from hashlib import sha1
 import hmac
 import requests
-from urllib import urlencode, quote
+from urllib.parse import urlencode, quote
 
 
 class Connection(object):
     def __init__(self, dev_id, key):
         self.dev_id = dev_id
-        self.key = key
+        self.key = str(key).encode('ASCII')
 
     def getUrl(self, request):
         dev_id = self.dev_id
-        key = str(self.key)
+        key = self.key
         request = request + ('&' if ('?' in request) else '?')
         raw = request+'devid={0}'.format(dev_id)
-        hashed = hmac.new(key, raw, sha1)
+        hashed = hmac.new(key, raw.encode('ASCII'), sha1)
         signature = hashed.hexdigest()
         return ('https://timetableapi.ptv.vic.gov.au'
                 + raw + '&signature={1}'.format(dev_id, signature))
